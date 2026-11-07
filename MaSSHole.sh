@@ -1,5 +1,7 @@
 #!/bin/sh
 # MaSSHole - detection-only checker for "*sshole" (CVE-2026-123158)
+# Copyright (c) 2026 Liam Romanis
+# SPDX-License-Identifier: MIT
 #
 # OpenSSH sshd on musl libc (Alpine, Buildroot, Yocto, OpenWrt+OpenSSH...),
 # built/run WITHOUT PAM, with PasswordAuthentication enabled, accepts an
