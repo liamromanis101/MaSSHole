@@ -1,0 +1,13 @@
+# Never commit SSH keys: each user generates their own lab key (see sshole-lab/README.md)
+sshole-lab/keys/
+*.pem
+id_rsa*
+id_ecdsa*
+id_ed25519*
+*_ed25519
+*_ed25519.pub
+
+# Scan output can contain internal hostnames and findings
+sshole-lab/results/
+masshole-reports-*/
+*.csv

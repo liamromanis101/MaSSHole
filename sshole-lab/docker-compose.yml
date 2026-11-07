@@ -1,0 +1,87 @@
+# *sshole detection lab. Targets are reachable only on the lab bridge network;
+# no ports are published to the host's external interfaces.
+# Change the subnet below if 172.30.99.0/24 is already used on your network.
+
+name: sshole-lab
+
+# The vulnerable image is built once (by the "vulnerable" service) and reused
+# by "mitigated" and "compromised".
+x-alpine-source: &alpine-source
+  image: sshole-lab/alpine-source:10.0p1
+  pull_policy: never
+  depends_on: [vulnerable]
+  volumes:
+    - ./MaSSHole.sh:/lab/MaSSHole.sh:ro
+
+services:
+  scanner:
+    build: { context: ., dockerfile: images/Dockerfile.scanner }
+    image: sshole-lab/scanner
+    pull_policy: build
+    volumes:
+      - ./MaSSHole.sh:/lab/MaSSHole.sh:ro
+      - ./results:/lab/results
+    networks: { lab: { ipv4_address: 172.30.99.10 } }
+
+  vulnerable:               # source-built OpenSSH 10.0p1, no PAM, password auth on
+    build:
+      context: .
+      dockerfile: images/Dockerfile.alpine-source
+      args:
+        OPENSSH_VERSION: "10.0p1"
+    image: sshole-lab/alpine-source:10.0p1
+    pull_policy: build
+    volumes: [ "./MaSSHole.sh:/lab/MaSSHole.sh:ro" ]
+    hostname: vulnerable
+    networks: { lab: { ipv4_address: 172.30.99.11 } }
+
+  patched:                  # Alpine's current openssh-server package
+    build:
+      context: .
+      dockerfile: images/Dockerfile.alpine-apk
+      args: { SSH_PKG: openssh-server }
+    image: sshole-lab/alpine-patched
+    pull_policy: build
+    hostname: patched
+    volumes: [ "./MaSSHole.sh:/lab/MaSSHole.sh:ro" ]
+    networks: { lab: { ipv4_address: 172.30.99.12 } }
+
+  mitigated:                # unpatched build, but PasswordAuthentication no
+    <<: *alpine-source
+    hostname: mitigated
+    environment: { PASSWORD_AUTH: "no" }
+    networks: { lab: { ipv4_address: 172.30.99.13 } }
+
+  pam:                      # Alpine openssh-server-pam with UsePAM yes
+    build:
+      context: .
+      dockerfile: images/Dockerfile.alpine-apk
+      args: { SSH_PKG: openssh-server-pam, LAB_USE_PAM: "yes" }
+    image: sshole-lab/alpine-pam
+    pull_policy: build
+    hostname: pam
+    volumes: [ "./MaSSHole.sh:/lab/MaSSHole.sh:ro" ]
+    networks: { lab: { ipv4_address: 172.30.99.14 } }
+
+  debian:                   # glibc control
+    build: { context: ., dockerfile: images/Dockerfile.debian }
+    image: sshole-lab/debian
+    pull_policy: build
+    hostname: debian
+    volumes: [ "./MaSSHole.sh:/lab/MaSSHole.sh:ro" ]
+    networks: { lab: { ipv4_address: 172.30.99.15 } }
+
+  compromised:              # vulnerable + a seeded "Accepted password for alpine" log line
+    <<: *alpine-source
+    hostname: compromised
+    environment: { SEED_IOC: "yes" }
+    networks: { lab: { ipv4_address: 172.30.99.16 } }
+
+  # 172.30.99.17 is deliberately left empty to show an unreachable host.
+
+networks:
+  lab:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.99.0/24

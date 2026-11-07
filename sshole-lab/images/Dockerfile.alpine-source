@@ -1,0 +1,29 @@
+# VULNERABLE target: upstream OpenSSH (< 10.6p2) built from source on Alpine
+# (musl), without PAM. Matches the conditions of *sshole / CVE-2026-123158.
+# Alpine's own repos now only carry fixed packages, so a source build is the
+# reliable way to get an unpatched sshd. LAB USE ONLY.
+
+ARG ALPINE_VERSION=3.22
+
+FROM alpine:${ALPINE_VERSION} AS build
+ARG OPENSSH_VERSION=10.0p1
+RUN apk add --no-cache build-base openssl-dev zlib-dev linux-headers curl
+WORKDIR /src
+RUN curl -fsSLO "https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-${OPENSSH_VERSION}.tar.gz" \
+ && tar xzf "openssh-${OPENSSH_VERSION}.tar.gz"
+WORKDIR /src/openssh-${OPENSSH_VERSION}
+RUN ./configure --prefix=/usr --sysconfdir=/etc/ssh --without-pam \
+        --with-privsep-path=/var/empty --with-privsep-user=sshd \
+ && make -j"$(nproc)" \
+ && make install-nokeys DESTDIR=/out
+
+FROM alpine:${ALPINE_VERSION}
+RUN apk add --no-cache libcrypto3 zlib \
+ && { id sshd >/dev/null 2>&1 || adduser -S -D -H -h /var/empty -s /sbin/nologin sshd; } \
+ && mkdir -p /var/empty
+COPY --from=build /out/ /
+COPY keys/lab_ed25519.pub /tmp/lab_ed25519.pub
+COPY images/lab-setup.sh images/entrypoint.sh /usr/local/sbin/
+RUN chmod +x /usr/local/sbin/*.sh && /usr/local/sbin/lab-setup.sh
+EXPOSE 22
+ENTRYPOINT ["/usr/local/sbin/entrypoint.sh"]
